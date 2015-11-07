@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <libmsp/mem.h>
 #include <libio/log.h>
@@ -25,10 +26,140 @@
 
 // #define SHOW_PROGRESS_ON_LED
 
+#define NUM_INSERTS 10
+#define NUM_LOOKUPS 10
+#define NUM_BUCKETS 32 // must be a power of 2
+#define MAX_RELOCATIONS 5
+#define INIT_KEY 0x1
+
+typedef uint16_t value_t;
+typedef uint16_t hash_t;
+typedef uint16_t fingerprint_t;
+typedef uint16_t index_t; // bucket index
+
 /* This is for progress reporting only */
 #define SET_CURTASK(t) curtask = t
 
 static __nv unsigned curtask;
+
+static fingerprint_t filter[NUM_BUCKETS];
+
+static hash_t djb_hash(uint8_t* data, unsigned len)
+{
+   uint32_t hash = 5381;
+   unsigned int i;
+
+   for(i = 0; i < len; data++, i++)
+      hash = ((hash << 5) + hash) + (*data);
+
+   return hash & 0xFFFF;
+}
+
+static index_t hash_fp_to_index(fingerprint_t fp)
+{
+    hash_t hash = djb_hash((uint8_t *)&fp, sizeof(fingerprint_t));
+    return hash & (NUM_BUCKETS - 1); // NUM_BUCKETS must be power of 2
+}
+
+static index_t hash_key_to_index(value_t fp)
+{
+    hash_t hash = djb_hash((uint8_t *)&fp, sizeof(value_t));
+    return hash & (NUM_BUCKETS - 1); // NUM_BUCKETS must be power of 2
+}
+
+static fingerprint_t hash_to_fingerprint(value_t key)
+{
+    return djb_hash((uint8_t *)&key, sizeof(value_t));
+}
+
+static void print_filter()
+{
+    unsigned i;
+    for (i = 0; i < NUM_BUCKETS; ++i) {
+        PRINTF("%04x ", filter[i]);
+        if (i > 0 && (i + 1) % 8 == 0)
+            PRINTF("\r\n");
+    }
+}
+
+static value_t generate_key(value_t prev_key)
+{
+    // insert pseufo-random integers, for testing
+    // If we use consecutive ints, they hash to consecutive DJB hashes...
+    // NOTE: we are not using rand(), to have the sequence available to verify
+    // that that are no false negatives (and avoid having to save the values).
+    return (prev_key + 1) * 17;
+}
+
+static bool insert(value_t key)
+{
+    fingerprint_t fp1, fp2, fp_victim, fp_next_victim;
+    index_t index_victim, fp_hash_victim;
+    unsigned relocation_count = 0;
+
+    fingerprint_t fp = hash_to_fingerprint(key);
+    index_t index1 = hash_key_to_index(key);
+    index_t fp_hash = hash_fp_to_index(fp);
+    index_t index2 = index1 ^ fp_hash;
+
+    LOG("insert: key %04x fp %04x fp hash %04x idx1 %u idx2 %u\r\n",
+        key, fp, fp_hash, index1, index2);
+
+    fp1 = filter[index1];
+    LOG("insert: fp1 %04x\r\n", fp1);
+    if (!fp1) { // slot 1 is free
+        filter[index1] = fp;
+    } else {
+        fp2 = filter[index2];
+        LOG("insert: fp2 %04x\r\n", fp2);
+        if (!fp2) { // slot 2 is free
+            filter[index2] = fp;
+        } else { // both slots occupied, evict
+            if (rand() % 2) {
+                index_victim = index1;
+                fp_victim = fp1;
+            } else {
+                index_victim = index2;
+                fp_victim = fp2;
+            }
+
+            LOG("insert: evict [%u] = %04x\r\n", index_victim, fp_victim);
+            filter[index_victim] = fp; // evict victim
+
+            do { // relocate victim(s)
+                fp_hash_victim = hash_fp_to_index(fp_victim);
+                index_victim = index_victim ^ fp_hash_victim;
+                fp_next_victim = filter[index_victim];
+                filter[index_victim] = fp_victim;
+
+                LOG("insert: relocated %04x to [%u]; next victim %04x\r\n",
+                    fp_victim, index_victim, fp_next_victim);
+
+                fp_victim = fp_next_victim;
+            } while (fp_victim && ++relocation_count < MAX_RELOCATIONS);
+
+            if (fp_victim) {
+                LOG("insert: max relocations (%u) exceeded\r\n", MAX_RELOCATIONS);
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+static bool lookup(value_t key)
+{
+    fingerprint_t fp = hash_to_fingerprint(key);
+    index_t index1 = hash_key_to_index(key);
+    index_t fp_hash = hash_fp_to_index(fp);
+    index_t index2 = index1 ^ fp_hash;
+
+    LOG("lookup: key %04x fp %04x fp hash %04x idx1 %u idx2 %u\r\n",
+        key, fp, fp_hash, index1, index2);
+
+    return filter[index1] == fp || filter[index2] == fp;
+}
 
 void init()
 {
@@ -61,12 +192,33 @@ void init()
 
 int main()
 {
+    unsigned i;
+    value_t key;
+
 #ifndef MEMENTOS
     init();
 #endif
 
     while (1) {
         PRINTF("hello world\r\n");
+
+        key = INIT_KEY;
+        for (i = 0; i < NUM_INSERTS; ++i) {
+            key = generate_key(key);
+            bool success = insert(key);
+            LOG("insert: key %04x success %u\r\n", key, success);
+            print_filter();
+
+            volatile uint32_t delay = 0x8ffff;
+            while (delay--);
+        }
+
+        key = INIT_KEY;
+        for (i = 0; i < NUM_LOOKUPS; ++i) {
+            key = generate_key(key);
+            bool member = lookup(key);
+            LOG("lookup: key %04x member %u\r\n", key, member);
+        }
 
         volatile uint32_t delay = 0x8ffff;
         while (delay--);
