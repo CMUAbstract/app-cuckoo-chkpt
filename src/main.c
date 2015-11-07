@@ -200,8 +200,6 @@ int main()
 #endif
 
     while (1) {
-        PRINTF("hello world\r\n");
-
         key = INIT_KEY;
         for (i = 0; i < NUM_INSERTS; ++i) {
             key = generate_key(key);
