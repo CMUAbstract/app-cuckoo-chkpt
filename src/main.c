@@ -102,7 +102,7 @@ static bool insert(value_t key)
     index_t fp_hash = hash_fp_to_index(fp);
     index_t index2 = index1 ^ fp_hash;
 
-    LOG("insert: key %04x fp %04x fp hash %04x idx1 %u idx2 %u\r\n",
+    LOG("insert: key %04x fp %04x h %04x idx1 %u idx2 %u\r\n",
         key, fp, fp_hash, index1, index2);
 
     fp1 = filter[index1];
@@ -132,7 +132,7 @@ static bool insert(value_t key)
                 fp_next_victim = filter[index_victim];
                 filter[index_victim] = fp_victim;
 
-                LOG("insert: relocated %04x to [%u]; next victim %04x\r\n",
+                LOG("insert: moved %04x to %u; next victim %04x\r\n",
                     fp_victim, index_victim, fp_next_victim);
 
                 fp_victim = fp_next_victim;
@@ -155,7 +155,7 @@ static bool lookup(value_t key)
     index_t fp_hash = hash_fp_to_index(fp);
     index_t index2 = index1 ^ fp_hash;
 
-    LOG("lookup: key %04x fp %04x fp hash %04x idx1 %u idx2 %u\r\n",
+    LOG("lookup: key %04x fp %04x h %04x idx1 %u idx2 %u\r\n",
         key, fp, fp_hash, index1, index2);
 
     return filter[index1] == fp || filter[index2] == fp;
