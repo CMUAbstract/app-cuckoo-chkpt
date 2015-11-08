@@ -18,7 +18,6 @@
 #endif
 
 #ifdef DINO
-#include <libmsp/mem.h>
 #include <dino.h>
 #endif
 
@@ -35,9 +34,52 @@
 /* This is for progress reporting only */
 #define SET_CURTASK(t) curtask = t
 
-#define TASK_GENERATE_KEY 1
-#define TASK_INSERT 2
-#define TASK_LOOKUP 3
+#define TASK_MAIN                   1
+#define TASK_GENERATE_KEY           2
+#define TASK_INSERT_FINGERPRINT     3
+#define TASK_INSERT_INDEX_1         4
+#define TASK_INSERT_INDEX_2         5
+#define TASK_INSERT_UPDATE          6
+#define TASK_RELOCATE_VICTIM        7
+#define TASK_RELOCATE_UPDATE        8
+#define TASK_LOOKUP_FINGERPRINT     9
+#define TASK_LOOKUP_INDEX_1        10
+#define TASK_LOOKUP_INDEX_2        11
+#define TASK_LOOKUP_CHECK          12
+#define TASK_PRINT_RESULTS         13
+
+#ifdef DINO
+
+#define TASK_BOUNDARY(t, x) \
+        DINO_TASK_BOUNDARY_MANUAL(x); \
+        SET_CURTASK(t); \
+
+#define DINO_RESTORE_NONE() \
+        DINO_REVERT_BEGIN() \
+        DINO_REVERT_END() \
+
+#define DINO_RESTORE_PTR(nm, type) \
+        DINO_REVERT_BEGIN() \
+        DINO_REVERT_PTR(type, nm); \
+        DINO_REVERT_END() \
+
+#define DINO_RESTORE_VAL(nm, label) \
+        DINO_REVERT_BEGIN() \
+        DINO_REVERT_VAL(nm, label); \
+        DINO_REVERT_END() \
+
+#else // !DINO
+
+#define TASK_BOUNDARY(t, x) SET_CURTASK(t)
+
+#define DINO_RESTORE_CHECK()
+#define DINO_VERSION_PTR(...)
+#define DINO_VERSION_VAL(...)
+#define DINO_RESTORE_NONE()
+#define DINO_RESTORE_PTR(...)
+#define DINO_RESTORE_VAL(...)
+
+#endif // !DINO
 
 static __nv unsigned curtask;
 
@@ -71,7 +113,8 @@ static fingerprint_t hash_to_fingerprint(value_t key)
 
 static value_t generate_key(value_t prev_key)
 {
-    SET_CURTASK(TASK_GENERATE_KEY);
+    TASK_BOUNDARY(TASK_GENERATE_KEY, NULL);
+    DINO_RESTORE_NONE();
 
     // insert pseufo-random integers, for testing
     // If we use consecutive ints, they hash to consecutive DJB hashes...
@@ -86,12 +129,29 @@ static bool insert(fingerprint_t *filter, value_t key)
     index_t index_victim, fp_hash_victim;
     unsigned relocation_count = 0;
 
-    SET_CURTASK(TASK_INSERT);
+    TASK_BOUNDARY(TASK_INSERT_FINGERPRINT, NULL);
+    DINO_RESTORE_NONE();
 
     fingerprint_t fp = hash_to_fingerprint(key);
+
+    TASK_BOUNDARY(TASK_INSERT_INDEX_1, NULL);
+    DINO_RESTORE_NONE();
+
     index_t index1 = hash_key_to_index(key);
+
+    TASK_BOUNDARY(TASK_INSERT_INDEX_2, NULL);
+    DINO_RESTORE_NONE();
+
     index_t fp_hash = hash_fp_to_index(fp);
     index_t index2 = index1 ^ fp_hash;
+
+    DINO_VERSION_VAL(fingerprint_t, filter[index1], filter_index1);
+    DINO_VERSION_VAL(fingerprint_t, filter[index2], filter_index2);
+    TASK_BOUNDARY(TASK_INSERT_UPDATE, NULL);
+    DINO_REVERT_BEGIN();
+    DINO_REVERT_VAL(filter[index1], filter_index1);
+    DINO_REVERT_VAL(filter[index2], filter_index2);
+    DINO_REVERT_END();
 
     LOG("insert: key %04x fp %04x h %04x idx1 %u idx2 %u\r\n",
         key, fp, fp_hash, index1, index2);
@@ -118,8 +178,16 @@ static bool insert(fingerprint_t *filter, value_t key)
             filter[index_victim] = fp; // evict victim
 
             do { // relocate victim(s)
+                TASK_BOUNDARY(TASK_RELOCATE_VICTIM, NULL);
+                DINO_RESTORE_NONE();
+
                 fp_hash_victim = hash_fp_to_index(fp_victim);
                 index_victim = index_victim ^ fp_hash_victim;
+
+                DINO_VERSION_VAL(fingerprint_t, filter[index_victim], filter_victim);
+                TASK_BOUNDARY(TASK_RELOCATE_UPDATE, NULL);
+                DINO_RESTORE_VAL(filter[index_victim], filter_victim);
+
                 fp_next_victim = filter[index_victim];
                 filter[index_victim] = fp_victim;
 
@@ -141,12 +209,24 @@ static bool insert(fingerprint_t *filter, value_t key)
 
 static bool lookup(fingerprint_t *filter, value_t key)
 {
-    SET_CURTASK(TASK_LOOKUP);
+    TASK_BOUNDARY(TASK_LOOKUP_FINGERPRINT, NULL);
+    DINO_RESTORE_NONE();
 
     fingerprint_t fp = hash_to_fingerprint(key);
+
+    TASK_BOUNDARY(TASK_LOOKUP_INDEX_1, NULL);
+    DINO_RESTORE_NONE();
+
     index_t index1 = hash_key_to_index(key);
+
+    TASK_BOUNDARY(TASK_LOOKUP_INDEX_2, NULL);
+    DINO_RESTORE_NONE();
+
     index_t fp_hash = hash_fp_to_index(fp);
     index_t index2 = index1 ^ fp_hash;
+
+    TASK_BOUNDARY(TASK_LOOKUP_CHECK, NULL);
+    DINO_RESTORE_NONE();
 
     LOG("lookup: key %04x fp %04x h %04x idx1 %u idx2 %u\r\n",
         key, fp, fp_hash, index1, index2);
@@ -190,20 +270,30 @@ int main()
 
     // Mementos can't handle globals: it restores them to .data, when they are
     // in .bss... So, for now, just keep all data on stack.
+#ifdef MEMENTOS
     fingerprint_t filter[NUM_BUCKETS];
 
-    // can't use C initializer because it gets converted into memset,
-    // but the memset linked in by GCC is of the wrong calling convention,
-    // but we can't override with our own memset because C runtime
+    // Can't use C initializer because it gets converted into
+    // memset, but the memset linked in by GCC is of the wrong calling
+    // convention, but we can't override with our own memset because C runtime
     // calls memset with GCC's calling convention. Catch 22.
     for (i = 0; i < NUM_BUCKETS; ++i)
         filter[i] = 0;
+#else // !MEMENTOS
+    static __nv fingerprint_t filter[NUM_BUCKETS];
+#endif // !MEMENTOS
+
 
 #ifndef MEMENTOS
     init();
 #endif
 
+    DINO_RESTORE_CHECK();
+
     while (1) {
+        TASK_BOUNDARY(TASK_MAIN, NULL);
+        DINO_RESTORE_NONE();
+
         key = INIT_KEY;
         unsigned inserts = 0;
         for (i = 0; i < NUM_KEYS; ++i) {
@@ -230,6 +320,9 @@ int main()
             members += member;
         }
         LOG("members/total: %u/%u\r\n", members, NUM_KEYS);
+
+        TASK_BOUNDARY(TASK_PRINT_RESULTS, NULL);
+        DINO_RESTORE_NONE();
 
         print_filter(filter);
         print_stats(inserts, members, NUM_KEYS);
