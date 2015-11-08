@@ -201,7 +201,7 @@ static bool insert(fingerprint_t *filter, value_t key)
             } while (fp_victim && ++relocation_count < MAX_RELOCATIONS);
 
             if (fp_victim) {
-                LOG("insert: max relocations (%u) exceeded\r\n", MAX_RELOCATIONS);
+                PRINTF("insert: lost fp %04x\r\n", fp_victim);
                 return false;
             }
         }
@@ -303,6 +303,8 @@ int main()
             key = generate_key(key);
             bool success = insert(filter, key);
             LOG("insert: key %04x success %u\r\n", key, success);
+            if (!success)
+                PRINTF("insert: key %04x failed\r\n", key);
             log_filter(filter);
 
             inserts += success;
@@ -320,6 +322,8 @@ int main()
             key = generate_key(key);
             bool member = lookup(filter, key);
             LOG("lookup: key %04x member %u\r\n", key, member);
+            if (!member)
+                PRINTF("lookup: key %04x not member\r\n", key);
             members += member;
         }
         LOG("members/total: %u/%u\r\n", members, NUM_KEYS);
