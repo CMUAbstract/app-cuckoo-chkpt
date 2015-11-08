@@ -78,6 +78,9 @@
 #define DINO_RESTORE_NONE()
 #define DINO_RESTORE_PTR(...)
 #define DINO_RESTORE_VAL(...)
+#define DINO_REVERT_BEGIN(...)
+#define DINO_REVERT_END(...)
+#define DINO_REVERT_VAL(...)
 
 #endif // !DINO
 
