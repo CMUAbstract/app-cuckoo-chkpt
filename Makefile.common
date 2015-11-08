@@ -8,3 +8,7 @@ CONFIG_LIBEDB_PRINTF = eif
 include $(MAKER_ROOT)/Makefile.board
 include $(MAKER_ROOT)/Makefile.console
 include $(MAKER_ROOT)/Makefile.edb
+
+ifeq ($(CONT_POWER),1)
+CFLAGS += -DCONT_POWER
+endif

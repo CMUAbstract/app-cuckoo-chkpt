@@ -28,7 +28,6 @@
 #include "pins.h"
 
 // #define SHOW_PROGRESS_ON_LED
-// #define ENABLE_LOOP_DELAY // useful when running on continous power
 
 #define NUM_KEYS 10
 #define INIT_KEY 0x1
@@ -215,7 +214,7 @@ int main()
 
             inserts += success;
 
-#ifdef ENABLE_LOOP_DELAY
+#ifdef CONT_POWER
             volatile uint32_t delay = 0x8ffff;
             while (delay--);
 #endif
@@ -235,7 +234,7 @@ int main()
         print_filter(filter);
         print_stats(inserts, members, NUM_KEYS);
 
-#ifdef ENABLE_LOOP_DELAY
+#ifdef CONT_POWER
         volatile uint32_t delay = 0x8ffff;
         while (delay--);
 #endif
