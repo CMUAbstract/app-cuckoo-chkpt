@@ -1,8 +1,8 @@
 #ifndef CUCKOO_H
 #define CUCKOO_H
 
-#define NUM_BUCKETS 32 // must be a power of 2
-#define MAX_RELOCATIONS 5
+#define NUM_BUCKETS 1024 // must be a power of 2
+#define MAX_RELOCATIONS 256
 
 typedef uint16_t value_t;
 typedef uint16_t hash_t;
