@@ -169,7 +169,7 @@ static bool insert(fingerprint_t *filter, value_t key)
         if (!fp2) { // slot 2 is free
             filter[index2] = fp;
         } else { // both slots occupied, evict
-            if (rand() % 2) {
+            if (rand() & 0x80) { // don't use lsb because it's systematic
                 index_victim = index1;
                 fp_victim = fp1;
             } else {
