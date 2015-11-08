@@ -156,7 +156,7 @@ static bool insert(fingerprint_t *filter, value_t key)
     DINO_REVERT_VAL(filter[index2], filter_index2);
     DINO_REVERT_END();
 
-    LOG("insert: key %04x fp %04x h %04x idx1 %u idx2 %u\r\n",
+    LOG("insert: key %04x fp %04x h %04x i1 %u i2 %u\r\n",
         key, fp, fp_hash, index1, index2);
 
     fp1 = filter[index1];
@@ -231,7 +231,7 @@ static bool lookup(fingerprint_t *filter, value_t key)
     TASK_BOUNDARY(TASK_LOOKUP_CHECK, NULL);
     DINO_RESTORE_NONE();
 
-    LOG("lookup: key %04x fp %04x h %04x idx1 %u idx2 %u\r\n",
+    LOG("lookup: key %04x fp %04x h %04x i1 %u i2 %u\r\n",
         key, fp, fp_hash, index1, index2);
 
     return filter[index1] == fp || filter[index2] == fp;
