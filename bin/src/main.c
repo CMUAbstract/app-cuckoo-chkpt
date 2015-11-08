@@ -22,27 +22,25 @@
 #include <dino.h>
 #endif
 
+#include "libcuckoo/cuckoo.h"
+#include "libcuckoo/print.h"
+
 #include "pins.h"
 
 // #define SHOW_PROGRESS_ON_LED
+// #define ENABLE_LOOP_DELAY // useful when running on continous power
 
-#define NUM_INSERTS 10
-#define NUM_LOOKUPS 10
-#define NUM_BUCKETS 32 // must be a power of 2
-#define MAX_RELOCATIONS 5
+#define NUM_KEYS 10
 #define INIT_KEY 0x1
-
-typedef uint16_t value_t;
-typedef uint16_t hash_t;
-typedef uint16_t fingerprint_t;
-typedef uint16_t index_t; // bucket index
 
 /* This is for progress reporting only */
 #define SET_CURTASK(t) curtask = t
 
-static __nv unsigned curtask;
+#define TASK_GENERATE_KEY 1
+#define TASK_INSERT 2
+#define TASK_LOOKUP 3
 
-static fingerprint_t filter[NUM_BUCKETS];
+static __nv unsigned curtask;
 
 static hash_t djb_hash(uint8_t* data, unsigned len)
 {
@@ -72,18 +70,10 @@ static fingerprint_t hash_to_fingerprint(value_t key)
     return djb_hash((uint8_t *)&key, sizeof(value_t));
 }
 
-static void print_filter()
-{
-    unsigned i;
-    for (i = 0; i < NUM_BUCKETS; ++i) {
-        PRINTF("%04x ", filter[i]);
-        if (i > 0 && (i + 1) % 8 == 0)
-            PRINTF("\r\n");
-    }
-}
-
 static value_t generate_key(value_t prev_key)
 {
+    SET_CURTASK(TASK_GENERATE_KEY);
+
     // insert pseufo-random integers, for testing
     // If we use consecutive ints, they hash to consecutive DJB hashes...
     // NOTE: we are not using rand(), to have the sequence available to verify
@@ -91,11 +81,13 @@ static value_t generate_key(value_t prev_key)
     return (prev_key + 1) * 17;
 }
 
-static bool insert(value_t key)
+static bool insert(fingerprint_t *filter, value_t key)
 {
     fingerprint_t fp1, fp2, fp_victim, fp_next_victim;
     index_t index_victim, fp_hash_victim;
     unsigned relocation_count = 0;
+
+    SET_CURTASK(TASK_INSERT);
 
     fingerprint_t fp = hash_to_fingerprint(key);
     index_t index1 = hash_key_to_index(key);
@@ -148,8 +140,10 @@ static bool insert(value_t key)
     return true;
 }
 
-static bool lookup(value_t key)
+static bool lookup(fingerprint_t *filter, value_t key)
 {
+    SET_CURTASK(TASK_LOOKUP);
+
     fingerprint_t fp = hash_to_fingerprint(key);
     index_t index1 = hash_key_to_index(key);
     index_t fp_hash = hash_fp_to_index(fp);
@@ -195,31 +189,56 @@ int main()
     unsigned i;
     value_t key;
 
+    // Mementos can't handle globals: it restores them to .data, when they are
+    // in .bss... So, for now, just keep all data on stack.
+    fingerprint_t filter[NUM_BUCKETS];
+
+    // can't use C initializer because it gets converted into memset,
+    // but the memset linked in by GCC is of the wrong calling convention,
+    // but we can't override with our own memset because C runtime
+    // calls memset with GCC's calling convention. Catch 22.
+    for (i = 0; i < NUM_BUCKETS; ++i)
+        filter[i] = 0;
+
 #ifndef MEMENTOS
     init();
 #endif
 
     while (1) {
         key = INIT_KEY;
-        for (i = 0; i < NUM_INSERTS; ++i) {
+        unsigned inserts = 0;
+        for (i = 0; i < NUM_KEYS; ++i) {
             key = generate_key(key);
-            bool success = insert(key);
+            bool success = insert(filter, key);
             LOG("insert: key %04x success %u\r\n", key, success);
-            print_filter();
+            log_filter(filter);
 
+            inserts += success;
+
+#ifdef ENABLE_LOOP_DELAY
             volatile uint32_t delay = 0x8ffff;
             while (delay--);
+#endif
         }
+        LOG("inserts/total: %u/%u\r\n", inserts, NUM_KEYS);
 
         key = INIT_KEY;
-        for (i = 0; i < NUM_LOOKUPS; ++i) {
+        unsigned members = 0;
+        for (i = 0; i < NUM_KEYS; ++i) {
             key = generate_key(key);
-            bool member = lookup(key);
+            bool member = lookup(filter, key);
             LOG("lookup: key %04x member %u\r\n", key, member);
+            members += member;
         }
+        LOG("members/total: %u/%u\r\n", members, NUM_KEYS);
 
+        print_filter(filter);
+        print_stats(inserts, members, NUM_KEYS);
+
+#ifdef ENABLE_LOOP_DELAY
         volatile uint32_t delay = 0x8ffff;
         while (delay--);
+#endif
     }
 
     return 0;

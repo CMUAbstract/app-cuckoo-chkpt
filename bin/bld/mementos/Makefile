@@ -3,23 +3,24 @@ EXEC = cuckoo.out
 OBJECTS = \
 	main.o \
 
-BOARD = wisp
-CONFIG_EDB = 1
-CONFIG_PRINTF_LIB = libedb
-CONFIG_LIBEDB_PRINTF = eif
+MEMENTOS_MODE = timer+latch
 
-include $(MAKER_ROOT)/Makefile.clang
-include $(MAKER_ROOT)/Makefile.board
-include $(MAKER_ROOT)/Makefile.console
-include $(MAKER_ROOT)/Makefile.edb
+include ../../../Makefile.common
+
+include $(MAKER_ROOT)/Makefile.mementos
+
+# Private aux library: it exists to exclude some sources from Mementos passes
+LIBCUCKOO_ROOT = ../../../lib
 
 CFLAGS += \
+	-I$(LIBCUCKOO_ROOT)/src/include \
 	-I$(LIBMSP_ROOT)/src/include \
 	-I$(LIBMSPMATH_ROOT)/src/include \
 	-I$(LIBMSPBUILTINS_ROOT)/src/include \
 	-I$(LIBIO_ROOT)/src/include \
 
-LLVM_LIBS += \
+LLVM_NOOPT_LIBS += \
+	$(LIBCUCKOO_ROOT)/bld/clang/libcuckoo.a.bc \
 	$(LIBMSPMATH_ROOT)/bld/clang/libmspmath.a.bc \
 	$(LIBMSP_ROOT)/bld/clang/libmsp.a.bc \
 
