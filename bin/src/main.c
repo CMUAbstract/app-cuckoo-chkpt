@@ -338,6 +338,8 @@ int main()
         volatile uint32_t delay = 0x8ffff;
         while (delay--);
 #endif
+
+        while (1);
     }
 
     return 0;
