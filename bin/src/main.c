@@ -28,7 +28,7 @@
 
 // #define SHOW_PROGRESS_ON_LED
 
-#define NUM_KEYS 10
+#define NUM_KEYS (3 * (NUM_BUCKETS / 4)) // shoot for 75% occupancy
 #define INIT_KEY 0x1
 
 /* This is for progress reporting only */
