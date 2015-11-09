@@ -274,7 +274,12 @@ int main()
     // Mementos can't handle globals: it restores them to .data, when they are
     // in .bss... So, for now, just keep all data on stack.
 #ifdef MEMENTOS
+
+#ifdef MEMENTOS_NONVOLATILE
+    static __nv fingerprint_t filter[NUM_BUCKETS];
+#else
     fingerprint_t filter[NUM_BUCKETS];
+#endif
 
     // Can't use C initializer because it gets converted into
     // memset, but the memset linked in by GCC is of the wrong calling
