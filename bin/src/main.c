@@ -322,8 +322,10 @@ int main()
             key = generate_key(key);
             bool member = lookup(filter, key);
             LOG("lookup: key %04x member %u\r\n", key, member);
-            if (!member)
-                PRINTF("lookup: key %04x not member\r\n", key);
+            if (!member) {
+                fingerprint_t fp = hash_to_fingerprint(key);
+                PRINTF("lookup: key %04x fp %04x not member\r\n", key, fp);
+            }
             members += member;
         }
         LOG("members/total: %u/%u\r\n", members, NUM_KEYS);
