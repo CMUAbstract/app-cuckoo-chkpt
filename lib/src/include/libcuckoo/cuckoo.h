@@ -1,6 +1,8 @@
 #ifndef CUCKOO_H
 #define CUCKOO_H
 
+#include <stdint.h>
+
 #define NUM_BUCKETS 256 // must be a power of 2
 #define MAX_RELOCATIONS 8
 
