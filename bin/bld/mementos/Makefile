@@ -4,6 +4,7 @@ OBJECTS = \
 	main.o \
 
 MEMENTOS_MODE = timer+latch
+MEMENTOS_VARIANT ?= V
 
 include ../../../Makefile.common
 
@@ -11,6 +12,12 @@ include $(MAKER_ROOT)/Makefile.mementos
 
 # Private aux library: it exists to exclude some sources from Mementos passes
 LIBCUCKOO_ROOT = ../../../lib
+
+ifeq ($(MEMENTOS_VARIANT),NV)
+CFLAGS += -DMEMENTOS_NONVOLATILE
+else ifeq ($(MEMENTOS_VARIANT),V)
+# nothing to set, that's by default
+endif
 
 CFLAGS += \
 	-I$(LIBCUCKOO_ROOT)/src/include \
